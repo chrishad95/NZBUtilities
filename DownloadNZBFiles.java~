@@ -190,18 +190,12 @@ public class DownloadNZBFiles {
 
 							//filename = filename + "_" + articleNumber + ".nzb";
 
-							if (filename.indexOf("Pickup_Babes_Vol_3") >= 0) {
-								// do nothing
-			 					System.out.println("Skipping file: -->" + filename + "<--  ...");
-
-							} else {
-			 					System.out.println("Adding file: -->" + filename + "<-- to the queue...");
-			 					articleNumbers.add(articleNumber);
-			 					filenames.add(filename);
-							}
+			 				System.out.println("Adding file: -->" + filename + "<-- to the queue...");
+			 				articleNumbers.add(articleNumber);
+			 				filenames.add(filename);
 			 			}
 			
-			     		/*System.out.println("\nSubject: " + subject + " " + msgDate);
+			     		System.out.println("\nSubject: " + subject + " " + msgDate);
 			 			System.out.println("Filename: " + filename);
 			     		System.out.println("Article Number: " + articleNumber);
 			     		System.out.println("From: " + from);
@@ -210,7 +204,7 @@ public class DownloadNZBFiles {
 			     		System.out.println("Size: " + messageSize);
 			 			System.out.println("Part Number:" + partNumber);
 			 			System.out.println("Total Parts:" + totalParts);
-						*/
+				//		*/
 			
 			
 			 		}

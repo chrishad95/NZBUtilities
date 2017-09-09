@@ -83,6 +83,7 @@ public class GetHeaders {
 			lastArticle = firstArticle + maxArticles;
 		}
 
+		//  what is this code?
 //		Iterable<Article> articles = client.iterateArticleInfo(firstArticle, lastArticle);
 //		
 //		for (Article article: articles) {
