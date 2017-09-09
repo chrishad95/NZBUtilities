@@ -25,6 +25,14 @@ import org.apache.commons.net.PrintCommandListener;
 import org.apache.commons.net.nntp.NNTPClient;
 import org.apache.commons.net.nntp.NewsgroupInfo;
 
+import java.sql.Connection;
+import java.util.Date;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.text.SimpleDateFormat;
 /**
  * Sample program demonstrating the use of article header and body retrieval
  */
@@ -32,7 +40,7 @@ public class ListNewsgroups {
 
     public static void main(String[] args) throws SocketException, IOException {
 
-        if (args.length != 3) {
+        if (args.length != 3 && args.length != 5) {
             System.out.println("Usage: ListNewsgroups <hostname> [<user> <password>]");
             return;
         }
@@ -46,7 +54,7 @@ public class ListNewsgroups {
 			System.out.println("Connected to " + hostname );
 		}
 
-        if (args.length == 3) { // Optional auth
+        if (args.length >= 3) { // Optional auth
             String user = args[1];
             String password = args[2];
             if(client.authenticate(user, password)) {
@@ -57,10 +65,38 @@ public class ListNewsgroups {
             }
         }
 
+        // mysql connection
+        Connection con = null;
+        
+        PreparedStatement pst = null;
+        ResultSet rs = null;
+        
+        String url = "jdbc:mysql://192.168.1.33:3306/nzb";
+
+        String dbUser = "";
+        String dbPassword = "";
+	if (args.length >= 5) {
+		dbUser = args[3];
+		dbPassword = args[4];
+	}
+
+        try {
+        	con = DriverManager.getConnection(url, dbUser, dbPassword);
+
+        	pst = con.prepareStatement("select ID from group_info WHERE NAME = ?");
+		PreparedStatement updateGroupInfoStmt = 
+			con.prepareStatement("update group_info set article_count=?, first_article=?, last_article=? where id=?");
+		PreparedStatement insertGroupInfoStmt = 
+			con.prepareStatement("insert into group_info (article_count, first_article, last_article, name)"
+				+ " values (?,?,?,?)");
+
+        	int groupID = -1;
+
 		NewsgroupInfo[] groups;
 		groups = client.listNewsgroups();
 		if (groups != null) {
 			for (int i=0; i< groups.length; i++) {
+
 				System.out.println(groups[i].getNewsgroup() 
 					+ ", " 
 					+ groups[i].getArticleCountLong()
@@ -69,11 +105,67 @@ public class ListNewsgroups {
 					+ ", " 
 					+ groups[i].getLastArticleLong()
 					);
+
+				long groupArticleCount = groups[i].getArticleCountLong();
+				long groupLastArticle = groups[i].getLastArticleLong();
+				long groupFirstArticle = groups[i].getFirstArticleLong();
+				String groupName = groups[i].getNewsgroup();
+
+        			pst.setString(1, groupName);
+        			
+        			rs = pst.executeQuery();
+				
+				// check to see if there is a record in group_info for this group
+        			if (rs.next()) {
+        				groupID = rs.getInt(1);
+
+        				//lastRecord = rs.getLong(2);
+				        updateGroupInfoStmt.setLong(1, groupArticleCount);
+				        updateGroupInfoStmt.setLong(2, groupFirstArticle);
+				        updateGroupInfoStmt.setLong(3, groupLastArticle);
+				        updateGroupInfoStmt.setInt(4, groupID);
+				        updateGroupInfoStmt.execute();
+        		
+        			} else {
+					// need to create the record
+				        insertGroupInfoStmt.setLong(1, groupArticleCount);
+				        insertGroupInfoStmt.setLong(2, groupFirstArticle);
+				        insertGroupInfoStmt.setLong(3, groupLastArticle);
+				        insertGroupInfoStmt.setString(4, groupName);
+				        insertGroupInfoStmt.execute();
+        			}
+
 			}
 		} else {
 			System.err.println("LIST command failed.");
 			System.err.println("Server reply: " + client.getReplyString());
 		}
+        	if (rs != null) {
+        		rs.close();
+        	}
+        	if (pst != null) {
+        		pst.close();
+        	}
+
+        } catch (SQLException ex) {
+        	System.out.println(ex.getLocalizedMessage());
+        } finally {
+        	try {
+        		if (pst != null) {
+        			pst.close();
+        		}
+        		if (con != null) {
+        			con.close();
+        		}
+        	} catch (SQLException ex) {
+        		System.out.println(ex.getMessage());
+        	}
+        }
+
+    }
+
+    public static void updateGroup(String name, long article_count, long first_article, long last_article) {
+
 
     }
 
