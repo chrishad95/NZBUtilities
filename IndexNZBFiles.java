@@ -52,21 +52,43 @@ public class IndexNZBFiles {
 
         String hostname = args[0];
         String newsgroup = args[1];
+
         // Article specifier can be numeric or Id in form <m.n.o.x@host>
-        String articleSpec = args.length >= 3 ? args[2] : null;
+        //String articleSpec = args.length >= 3 ? args[2] : null;
+        String articleSpec = args[2];
 
         NNTPClient client = new NNTPClient();
         client.addProtocolCommandListener(new PrintCommandListener(new PrintWriter(System.err), true));
         client.connect(hostname);
 
-        if (args.length == 5) { // Optional auth
-            String user = args[3];
-            String password = args[4];
-            if(!client.authenticate(user, password)) {
-                System.out.println("Authentication failed for user " + user + "!");
-                System.exit(1);
-            }
+	// news server authentication
+        String user = args[3];
+        String password = args[4];
+        if(!client.authenticate(user, password)) {
+            System.out.println("Authentication failed for user " + user + "!");
+            System.exit(1);
         }
+
+        // mysql connection
+        Connection con = null;
+        PreparedStatement pst = null;
+        ResultSet rs = null;
+        
+        String url = "jdbc:mysql://192.168.1.33:3306/nzb";
+
+        String dbUser = args[5];
+        String dbPassword = args[6];
+        try {
+        	con = DriverManager.getConnection(url, dbUser, dbPassword);
+        } catch (SQLException ex) {
+		System.out.println(ex.getLocalizedMessage());
+		System.out.println("Authentication failed for dbuser " + dbUser + "!");
+		System.exit(1);
+        }
+
+	// get newsgroup info
+	// grab this many articles at a time
+	long maxArticles = 100000;
 
         NewsgroupInfo group = new NewsgroupInfo();
         client.selectNewsgroup(newsgroup, group);
@@ -83,23 +105,31 @@ public class IndexNZBFiles {
 		ArrayList<Long> articleNumbers = new ArrayList<Long>();
 		ArrayList<String> filenames = new ArrayList<String>();
 
+		// starting point will be the article number in articleSpec
 		long startingPoint = Long.parseLong(articleSpec);
 
-		// grab this many articles at a time
-		long maxArticles = 100000;
 
+		// first available article in the group
 		long groupFirstArticle = group.getFirstArticleLong();
+
+		// last available article in the group
 		long groupLastArticle = group.getLastArticleLong();
 
-		long firstArticle = groupFirstArticle;
-		long lastArticle = groupLastArticle;
 
-		if (firstArticle < startingPoint) firstArticle = startingPoint;
+		// setting some working variables as 'cursors' that point to the set of
+		// articles that we are working on right now
+		long firstWorkingArticle = groupFirstArticle;
+		long lastWorkingArticle = groupLastArticle;
 
-		lastArticle = firstArticle + maxArticles;
+		if (firstWorkingArticle < startingPoint) firstWorkingArticle = startingPoint;
+
+		lastWorkingArticle = firstWorkingArticle + maxArticles;
 	
-		// for now just grab maxArticles articles
-		if (lastArticle > groupLastArticle) lastArticle = groupLastArticle;
+		// we can only go to the last available article, 
+		// so if the last working article is set greater than that just move it
+		// to the last available article in the group
+		if (lastWorkingArticle > groupLastArticle) lastWorkingArticle = groupLastArticle;
+
 		long lastArticleRead = 0;
 
 		while (lastArticleRead < groupLastArticle) {
@@ -110,20 +140,56 @@ public class IndexNZBFiles {
 			BufferedReader brHdr;
 			String line;
 			
-			brHdr = (BufferedReader) client.retrieveArticleInfo(firstArticle, lastArticle);
+			// pull the headers into the buffered reader
+			brHdr = (BufferedReader) client.retrieveArticleInfo(firstWorkingArticle, lastWorkingArticle);
 			//brHdr = (BufferedReader) client.retrieveHeader("Subject", firstArticle, lastArticle);
 			//brHdr = (BufferedReader) client.retrieveArticleHeader(i);
 			
 			if (brHdr != null) {
 			    while((line=brHdr.readLine()) != null) {
+				    	// header is tab delimited
+					// article number is the first item
+					// subject is the second item
+			 		long  articleNumber = Long.parseLong(line.split("\t")[0]);
 			 		String subject = line.split("\t")[1];
 
-			 		long  articleNumber = Long.parseLong(line.split("\t")[0]);
 					lastArticleRead = articleNumber;
+					
+			 		String fromName = line.split("\t")[2];
+			 		String msgDate = line.split("\t")[3];
+			 		String messageId = line.split("\t")[4];
+			 		messageId = messageId.substring(1);
+			 		messageId = messageId.substring(0, messageId.length()-1);
+			 		
+			 		
+			 		String strMessageSize = line.split("\t")[6];
+			 		int messageSize = 0;
+			 		try {
+				 		messageSize = Integer.parseInt(strMessageSize);
+			 		} catch (NumberFormatException nfe) {
+			 		}
+			 		
+			 		
+			 		String xref = line.split("\t")[8];
+			 		xref = xref.substring(6);
+
+
 
 					int pos = 0;
 					// find ".nzb" in subject and remove it
-					pos = subject.indexOf("\".nzb\"");
+					pos = subject.indexOf(".nzb");
+					if (pos >= 0) {
+						System.out.println(line );
+						System.out.println();
+						System.out.println("Article number: " + articleNumber + " Subject --->" + subject + "<---");
+						System.out.println("Message size: " + messageSize );
+						System.out.println();
+						System.out.println();
+
+			 			
+					}
+
+/**********************
 					while (pos >= 0) {
 						System.out.println("Removing \".nzb\" from subject --->" + subject + "<---");
 						
@@ -202,19 +268,10 @@ public class IndexNZBFiles {
 			 				filenames.add(filename);
 			 			}
 			
-			     		/*System.out.println("\nSubject: " + subject + " " + msgDate);
-			 			System.out.println("Filename: " + filename);
-			     		System.out.println("Article Number: " + articleNumber);
-			     		System.out.println("From: " + from);
-			     		System.out.println("Date: " + msgDate);
-			     		System.out.println("Message ID: " + messageId);
-			     		System.out.println("Size: " + messageSize);
-			 			System.out.println("Part Number:" + partNumber);
-			 			System.out.println("Total Parts:" + totalParts);
-						*/
 			
 			
 			 		}
+					*/
 			    }
 			}
 			brHdr.close();
@@ -347,12 +404,12 @@ public class IndexNZBFiles {
 
 				*/
 			}
-			firstArticle = lastArticleRead + 1;
+			firstWorkingArticle = lastArticleRead + 1;
 
-			lastArticle = firstArticle + maxArticles;
+			lastWorkingArticle = firstWorkingArticle + maxArticles;
 	
 			// for now just grab maxArticles articles
-			if (lastArticle > groupLastArticle) lastArticle = groupLastArticle;
+			if (lastWorkingArticle > groupLastArticle) lastWorkingArticle = groupLastArticle;
 		}
 	}
 
